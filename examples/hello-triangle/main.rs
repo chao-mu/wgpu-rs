@@ -29,7 +29,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let vs_module =
         device.create_shader_module(&wgpu::read_spirv(std::io::Cursor::new(&vs[..])).unwrap());
 
-    let fs = include_bytes!("shader.frag.spv");
+    // BUG changed the following from shader.frag.spv to  shader.vert.spv to recreate
+    // segfault that happens later on.
+    let fs = include_bytes!("shader.vert.spv");
     let fs_module =
         device.create_shader_module(&wgpu::read_spirv(std::io::Cursor::new(&fs[..])).unwrap());
 
