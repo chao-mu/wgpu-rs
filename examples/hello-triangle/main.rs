@@ -1,8 +1,23 @@
+use std::mem;
+
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::Window
 };
+
+use zerocopy::{AsBytes, FromBytes};
+
+#[path = "../framework.rs"]
+mod framework;
+
+#[repr(C)] 
+#[derive(Clone, Copy, AsBytes, FromBytes, Debug)]
+struct Uniforms {
+    color: [f32; 3],
+    size: [f32; 2]
+}
+
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let size = window.inner_size();
@@ -24,24 +39,22 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         limits: wgpu::Limits::default(),
     })
     .await;
-
-    let vs = include_bytes!("shader.vert.spv");
-    let vs_module =
-        device.create_shader_module(&wgpu::read_spirv(std::io::Cursor::new(&vs[..])).unwrap());
-
-    // BUG changed the following from shader.frag.spv to  shader.vert.spv to recreate
-    // segfault that happens later on.
-    let fs = include_bytes!("shader.vert.spv");
-    let fs_module =
-        device.create_shader_module(&wgpu::read_spirv(std::io::Cursor::new(&fs[..])).unwrap());
+    
+    let vs_bytes =
+        framework::load_glsl(include_str!("shader.vert"), framework::ShaderStage::Vertex);
+    let fs_bytes =
+        framework::load_glsl(include_str!("shader.frag"), framework::ShaderStage::Fragment);
+    let vs_module = device.create_shader_module(&vs_bytes);
+    let fs_module = device.create_shader_module(&fs_bytes);
 
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        bindings: &[],
-        label: None,
-    });
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        layout: &bind_group_layout,
-        bindings: &[],
+        bindings: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+            },
+        ],
         label: None,
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -102,6 +115,32 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 swap_chain = device.create_swap_chain(&surface, &sc_desc);
             }
             Event::RedrawRequested(_) => {
+                let size = window.inner_size();
+                let uniforms = Uniforms {
+                    color: [0.0, 1.0, 0.5],
+                    size: [size.width as f32, size.height as f32]
+                };
+                let uniform_size = mem::size_of::<Uniforms>() as wgpu::BufferAddress;
+                let uniform_buf = device.create_buffer_with_data(
+                    uniforms.as_bytes(),
+                    wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                );
+                //println!("{:?}", uniforms);
+
+                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &bind_group_layout,
+                    bindings: &[
+                        wgpu::Binding {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer {
+                                buffer: &uniform_buf,
+                                range: 0 .. uniform_size,
+                            },
+                        },
+                    ],
+                    label: None,
+                });
+
                 let frame = swap_chain
                     .get_next_texture()
                     .expect("Timeout when acquiring next swap chain texture");
@@ -121,7 +160,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     });
                     rpass.set_pipeline(&render_pipeline);
                     rpass.set_bind_group(0, &bind_group, &[]);
-                    rpass.draw(0 .. 3, 0 .. 1);
+                    rpass.draw(0 .. 6, 0 .. 1);
                 }
 
                 queue.submit(&[encoder.finish()]);

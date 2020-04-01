@@ -4,7 +4,15 @@ out gl_PerVertex {
     vec4 gl_Position;
 };
 
+const vec2 positions[6] = vec2[6](
+    vec2(-1., 1.),
+    vec2(1., 1.),
+    vec2(-1., -1.),
+    vec2(-1., -1.),
+    vec2(1., -1.),
+    vec2(1., 1.)
+);
+
 void main() {
-    vec2 position = vec2(gl_VertexIndex, (gl_VertexIndex & 1) * 2) - 1;
-    gl_Position = vec4(position, 0.0, 1.0);
+    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
 }
